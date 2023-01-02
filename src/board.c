@@ -129,7 +129,7 @@ void reveal_tile(Board* board, int row, int column)
     if(tiles[row][column].state == Revealed)
         return;
 
-    // If it is the first click and thnoey click on a non blank tile, reset
+    // If it is the first click and they click on a non blank tile, reset
     if(board->firstClick)
         while(tiles[row][column].hasMine || tiles[row][column].neighbouringMines > 0)
         {
