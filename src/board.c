@@ -129,7 +129,7 @@ void reveal_tile(Board* board, int row, int column)
     if(tiles[row][column].state == Revealed)
         return;
 
-    // If it is the first click and they click on a non blank tile, reset
+    // If it is the first click and thnoey click on a non blank tile, reset
     if(board->firstClick)
         while(tiles[row][column].hasMine || tiles[row][column].neighbouringMines > 0)
         {
@@ -229,4 +229,13 @@ static void reset_board(Board* board, struct Position* exclusion)
 {
     clear_board(board);
     place_mines(board, exclusion);
+}
+
+void regenerate_board(Board *board)
+{
+    board->firstClick = 1;
+    board->gameLose = 0;
+    board->flags = 0;
+
+    reset_board(board, NULL);
 }

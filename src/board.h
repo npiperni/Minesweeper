@@ -29,6 +29,7 @@ struct Position
 
 Board* create_board(int rows, int columns, int mines);
 void destroy_board(Board *board);
+void regenerate_board(Board *board);
 
 enum TileState get_tile_state(Board* board, int row, int column);
 void cover_tile(Board* board, int row, int column);

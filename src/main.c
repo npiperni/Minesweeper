@@ -12,6 +12,13 @@ struct HandlerData
     struct Position position;
 };
 
+static void set_remaining_mines_label(Board* board, GtkWidget* label)
+{
+    char labelText[10];
+    sprintf(labelText, "%d", board->mines - board->flags);
+    gtk_label_set_text(GTK_LABEL(label), labelText);
+}
+
 static void disconnect_grid_handlers(GtkWidget* grid, Board* board)
 {
     GtkWidget *imageTile;
@@ -81,6 +88,8 @@ static void update_grid(GtkWidget* grid, Board* board, struct Position lastTileC
                 set_tile_number(tileImage, board->tiles[i][j].neighbouringMines);
             if(get_tile_state(board, i, j) == Covered && board->tiles[i][j].hasMine && board->gameLose)
                 gtk_image_set_from_file(GTK_IMAGE(tileImage), "images/tile mine.png");
+            if(get_tile_state(board, i, j) == Flagged && !board->tiles[i][j].hasMine && board->gameLose)
+                gtk_image_set_from_file(GTK_IMAGE(tileImage), "images/tile X.png");
         }
     }
     if(board->gameLose)
@@ -127,8 +136,7 @@ static void tile_left_clicked(GtkGestureClick *gesture, int n_press, double x, d
     {
         reveal_tile(data->board, pos.row, pos.col);
 
-        char labelText[10];
-        sprintf(labelText, "%d", data->board->mines - data->board->flags);
+        set_remaining_mines_label(data->board, label);
 
         update_grid(data->grid, data->board, pos);
         int win = check_win(data->board);
@@ -136,13 +144,11 @@ static void tile_left_clicked(GtkGestureClick *gesture, int n_press, double x, d
         if(win || lose)
         {
             if (win)
-                strcpy(labelText, "You Win!");
+                gtk_label_set_text(GTK_LABEL(label), "You Win!");
             if (lose)
-                strcpy(labelText, "You Lose!");
+                gtk_label_set_text(GTK_LABEL(label), "You Lose!");
             disconnect_grid_handlers(data->grid, data->board);
         }
-
-        gtk_label_set_text(GTK_LABEL(label), labelText);
     }
 }
 
@@ -164,9 +170,7 @@ static void tile_right_clicked(GtkGestureClick *gesture, int n_press, double x, 
         gtk_image_set_from_file(GTK_IMAGE(imageTile), "images/tile hover.png");
     }
 
-    char labelText[4];
-    sprintf(labelText, "%d", data->board->mines - data->board->flags);
-    gtk_label_set_text(GTK_LABEL(label), labelText);
+    set_remaining_mines_label(data->board, label);
 
     //g_print("right click from %d %d\n", data->position.row, data->position.col);
 }
@@ -184,29 +188,12 @@ static void window_destroy(GtkWidget* widget, gpointer user_data)
     destroy_board(board);
 }
 
-static void create_gtk_tile_grid(GtkWidget* window, Board* board)
+static void add_tiles_to_grid(Board* board, GtkWidget* grid, GtkWidget *label)
 {
-    GtkWidget *vbox;
-    GtkWidget *label;
-
-    GtkWidget *grid;
     GtkWidget *image;
 
     GtkGesture *click;
     GtkEventController *mouseMotion;
-
-    char labelText[4];
-    sprintf(labelText, "%d", board->mines);
-
-    label = gtk_label_new(labelText);
-    grid = gtk_grid_new();
-
-    vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_margin_top (vbox, 8);
-    gtk_box_append(GTK_BOX(vbox), label);
-    gtk_box_append(GTK_BOX(vbox), grid);
-
-    gtk_window_set_child(GTK_WINDOW(window), vbox);
 
     for(int i = 0; i < board->rows; i++)
     {
@@ -254,12 +241,70 @@ static void create_gtk_tile_grid(GtkWidget* window, Board* board)
     }
 }
 
+static void create_main_window_scene(GtkWidget* window, Board* board)
+{
+    GtkWidget *vbox;
+    GtkWidget *label;
+
+    GtkWidget *grid;
+
+    label = gtk_label_new("");
+    set_remaining_mines_label(board, label);
+
+    grid = gtk_grid_new();
+
+    vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_margin_top (vbox, 8);
+    gtk_box_append(GTK_BOX(vbox), label);
+    gtk_box_append(GTK_BOX(vbox), grid);
+
+    gtk_window_set_child(GTK_WINDOW(window), vbox);
+
+    g_object_set_data(G_OBJECT(window), "grid", grid);
+    g_object_set_data(G_OBJECT(window), "label", label);
+
+    add_tiles_to_grid(board, grid, label);
+}
+
+static void clear_grid(GtkWidget* grid)
+{
+    GtkWidget *iter = gtk_widget_get_first_child (grid);
+    while (iter != NULL) {
+      GtkWidget *next = gtk_widget_get_next_sibling (iter);
+      gtk_grid_remove (GTK_GRID(grid), iter);
+      iter = next;
+    }
+}
+
+static gboolean on_key_press(GtkEventControllerKey* controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data)
+{
+    if(keycode != GDK_KEY_R)
+        return FALSE;
+
+    GtkWidget *window = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
+    GtkWidget *grid = g_object_get_data(G_OBJECT(window), "grid");
+    GtkWidget *label = g_object_get_data(G_OBJECT(window), "label");
+    Board *board = user_data;
+    clear_grid(grid);
+    add_tiles_to_grid(board, grid, label);
+
+    regenerate_board(board);
+
+    set_remaining_mines_label(board, label);
+
+    update_grid(grid, board, (struct Position){.row = 0, .col = 0});
+
+    return TRUE;
+}
+
 static void on_difficulty_dialog_response(GtkDialog * dialog, int response, gpointer user_data)
 {
     Board *board;
+    GtkEventController *keyPress;
     GtkApplication *app = user_data;
     GtkWidget *window = g_object_get_data(G_OBJECT(dialog), "Main Window");
     int *difficulty = g_object_get_data(G_OBJECT(dialog), "Difficulty");
+
 
     if (response == GTK_RESPONSE_OK)
     {
@@ -273,8 +318,13 @@ static void on_difficulty_dialog_response(GtkDialog * dialog, int response, gpoi
         if(board == NULL)
             exit(EXIT_FAILURE);
 
-        create_gtk_tile_grid(window, board);
+        create_main_window_scene(window, board);
         g_signal_connect_after(window, "destroy", G_CALLBACK(window_destroy), board);
+
+        keyPress = gtk_event_controller_key_new();
+        g_signal_connect(keyPress, "key-pressed", G_CALLBACK(on_key_press), board);
+        gtk_widget_add_controller(window, keyPress);
+
         gtk_window_close(GTK_WINDOW(dialog));
         gtk_widget_show(window);
     }
